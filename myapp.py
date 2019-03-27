@@ -5,12 +5,18 @@ import json
 import requests
 import  requests_cache
 from cassandra.cluster import Cluster
+import sqlite3
 
 requests_cache.install_cache('crime_api_cache', backend='sqlite', expire_after=36000)
 
 cluster = Cluster(['cassandra'])
 session = cluster.connect()
 app = Flask(__name__)
+
+#Creating the database
+session.execute("DROP KEYSPACE IF EXISTS stopandsearch")
+session.execute("""CREATE KEYSPACE stopandsearch WITH REPLICATION =
+                {'class' : 'SimpleStrategy', 'replication_factor' : 1}""")
 
 
 stops_url_template = 'https://data.police.uk/api/stops-street?lat={lat}&lng={lng}&date={data}'
@@ -20,6 +26,17 @@ stops_url_template = 'https://data.police.uk/api/stops-street?lat={lat}&lng={lng
 def home():
 
         my_latitude = request.args.get('lat','52.629729')
+
+        sql = """CREATE TABLE IF NOT EXISTS crime
+                 (crimeID INTEGER PRIMARY KEY,
+                 age_range TEXT,
+                 outcome TEXT,
+                 self_defined_ethnicity TEXT,
+                 gender TEXT,
+                 location TEXT,
+                 officer_defined_ethnicity TEXT,
+                 object_of_search TEXT)"""
+        db.execute(sql)
         my_longitude = request.args.get('lng','-1.131592')
         my_date = request.args.get('date','2018-06')
 
@@ -32,19 +49,16 @@ def home():
             print(resp.reason)
 
         #Database - Connecting to cassandra to create table and store data
-        with Cluster(['cassandra']).connect() as db:
-
-            db.execute("PRAGMA foreign_keys_ = ON")
-            sql = """CREATE TABLE IF NOT EXISTS crime
-                     (crimeID INTEGER PRIMARY KEY,
-                     age_range TEXT,
-                     outcome TEXT,
-                     self_defined_ethnicity TEXT,
-                     gender TEXT,
-                     location TEXT,
-                     officer_defined_ethnicity TEXT,
-                     object_of_search TEXT)"""
-            db.execute(sql)
+        sql = """CREATE TABLE IF NOT EXISTS stopandsearch
+                 (searchID INTEGER PRIMARY KEY,
+                 age_range TEXT,
+                 outcome TEXT,
+                 self_defined_ethnicity TEXT,
+                 gender TEXT,
+                 location TEXT,
+                 officer_defined_ethnicity TEXT,
+                 object_of_search TEXT)"""
+        session.execute(sql)
 
         #Gathering data to store in SQL table
         for stop in stops:
@@ -54,9 +68,9 @@ def home():
             gender = stop["gender"]
             location = stop["location"]["street"]["name"]
             officer_defined_ethnicity = stop["officer_defined_ethnicity"]
-            object_of_search = stop["object_of_search"]
+            object = stop["object_of_search"]
 
-            sql = """INSERT INTO crime(
+            sql = """INSERT INTO stopandsearch(
                   age_range,
                   outcome,
                   self_defined_ethnicity,
@@ -65,9 +79,11 @@ def home():
                   officer_defined_ethnicity,
                   object_of_search)
                   VALUES({}, {}, {}, {}, {}, {}, {})"""
-                  db.execute(sql.format(age_range, outcome, self_defined_ethnicity, gender, location, officer_defined_ethnicity, object_of_search))
+                  session.execute(sql.format(age_range, outcome, \
+                  self_defined_ethnicity, gender, location, \
+                  officer_defined_ethnicity, object))
 
-        data = db.execute("""SELECT * FROM crime""")
+        data = session.execute("""SELECT * FROM stopandsearch""")
 
         for crime in data:
             return crime
@@ -98,7 +114,8 @@ def stopschart():
 
     search_object_stats = {'None': 0}
     for stop in stops:
-        object_of_search = stop["object_of_search"]
+        object_of_search = stop["object_of
+    return "Welcome to my RESTful App"_search"]
         if not object_of_search:
             search_object_stats['None'] += 1
         elif object_of_search not in search_object_stats.keys():
