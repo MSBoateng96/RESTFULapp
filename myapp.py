@@ -20,73 +20,61 @@ session.execute("""CREATE KEYSPACE stopandsearch WITH REPLICATION =
 
 
 stops_url_template = 'https://data.police.uk/api/stops-street?lat={lat}&lng={lng}&date={data}'
-#categories_url_template = 'https://data.police.uk/api/crime-categories?date={date}'
 
 @app.route('/', methods=['GET'])
 def home():
 
-        my_latitude = request.args.get('lat','52.629729')
+    my_latitude = request.args.get('lat','52.629729')
+    my_longitude = request.args.get('lng','-1.131592')
+    my_date = request.args.get('date','2018-06')
 
-        sql = """CREATE TABLE IF NOT EXISTS crime
-                 (crimeID INTEGER PRIMARY KEY,
-                 age_range TEXT,
-                 outcome TEXT,
-                 self_defined_ethnicity TEXT,
-                 gender TEXT,
-                 location TEXT,
-                 officer_defined_ethnicity TEXT,
-                 object_of_search TEXT)"""
-        db.execute(sql)
-        my_longitude = request.args.get('lng','-1.131592')
-        my_date = request.args.get('date','2018-06')
+    stops_url = stops_url_template.format(lat = my_latitude, lng = my_longitude, data = my_date)
 
-        stops_url = stops_url_template.format(lat = my_latitude, lng = my_longitude, data = my_date)
+    resp = requests.get(stops_url)
+    if resp.ok:
+        stops = resp.json()
+    else:
+        print(resp.reason)
 
-        resp = requests.get(stops_url)
-        if resp.ok:
-            stops = resp.json()
-        else:
-            print(resp.reason)
+    #Database - Connecting to cassandra to create table and store data
+    sql = """CREATE TABLE IF NOT EXISTS stopandsearch
+             (searchID INTEGER PRIMARY KEY,
+             age_range TEXT,
+             outcome TEXT,
+             self_defined_ethnicity TEXT,
+             gender TEXT,
+             location TEXT,
+             officer_defined_ethnicity TEXT,
+             object_of_search TEXT)"""
+    session.execute(sql)
 
-        #Database - Connecting to cassandra to create table and store data
-        sql = """CREATE TABLE IF NOT EXISTS stopandsearch
-                 (searchID INTEGER PRIMARY KEY,
-                 age_range TEXT,
-                 outcome TEXT,
-                 self_defined_ethnicity TEXT,
-                 gender TEXT,
-                 location TEXT,
-                 officer_defined_ethnicity TEXT,
-                 object_of_search TEXT)"""
-        session.execute(sql)
+    #Gathering data to store in SQL table
+    for stop in stops:
+        age_range = stop["age_range"]
+        outcome = stop["outcome"]
+        self_defined_ethnicity = stop["self_defined_ethnicity"]
+        gender = stop["gender"]
+        location = stop["location"]["street"]["name"]
+        officer_defined_ethnicity = stop["officer_defined_ethnicity"]
+        object = stop["object_of_search"]
 
-        #Gathering data to store in SQL table
-        for stop in stops:
-            age_range = stop["age_range"]
-            outcome = stop["outcome"]
-            self_defined_ethnicity = stop["self_defined_ethnicity"]
-            gender = stop["gender"]
-            location = stop["location"]["street"]["name"]
-            officer_defined_ethnicity = stop["officer_defined_ethnicity"]
-            object = stop["object_of_search"]
+        sql = """INSERT INTO stopandsearch(
+              age_range,
+              outcome,
+              self_defined_ethnicity,
+              gender,
+              location,
+              officer_defined_ethnicity,
+              object_of_search)
+              VALUES({}, {}, {}, {}, {}, {}, {})"""
+        session.execute(sql.format(age_range, outcome, \
+        self_defined_ethnicity, gender, location, \
+        officer_defined_ethnicity, object))
 
-            sql = """INSERT INTO stopandsearch(
-                  age_range,
-                  outcome,
-                  self_defined_ethnicity,
-                  gender,
-                  location,
-                  officer_defined_ethnicity,
-                  object_of_search)
-                  VALUES({}, {}, {}, {}, {}, {}, {})"""
-            session.execute(sql.format(age_range, outcome, \
-            self_defined_ethnicity, gender, location, \
-            officer_defined_ethnicity, object))
+    data = session.execute("""SELECT * FROM stopandsearch""")
 
-        data = session.execute("""SELECT * FROM stopandsearch""")
-
-        for crime in data:
-            return crime
+    for stop in data:
+        return stop
 
 @app.route('/stopandsearch',  methods=['GET'])
 def stopschart():
@@ -114,8 +102,7 @@ def stopschart():
 
     search_object_stats = {'None': 0}
     for stop in stops:
-        object_of_search = stop["object_of
-    return "Welcome to my RESTful App"_search"]
+        object_of_search = stop["object_of_search"]
         if not object_of_search:
             search_object_stats['None'] += 1
         elif object_of_search not in search_object_stats.keys():
