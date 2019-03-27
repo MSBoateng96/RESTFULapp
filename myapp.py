@@ -4,21 +4,79 @@ from plotly.utils import PlotlyJSONEncoder
 import json
 import requests
 import  requests_cache
+from cassandra.cluster import Cluster
 
 requests_cache.install_cache('crime_api_cache', backend='sqlite', expire_after=36000)
 
+cluster = Cluster(['cassandra'])
+session = cluster.connect()
 app = Flask(__name__)
 
 
 stops_url_template = 'https://data.police.uk/api/stops-street?lat={lat}&lng={lng}&date={data}'
 #categories_url_template = 'https://data.police.uk/api/crime-categories?date={date}'
 
+@app.route('/', methods=['GET'])
+def home():
+
+        my_latitude = request.args.get('lat','52.629729')
+        my_longitude = request.args.get('lng','-1.131592')
+        my_date = request.args.get('date','2018-06')
+
+        stops_url = stops_url_template.format(lat = my_latitude, lng = my_longitude, data = my_date)
+
+        resp = requests.get(stops_url)
+        if resp.ok:
+            stops = resp.json()
+        else:
+            print(resp.reason)
+
+        #Database - Connecting to cassandra to create table and store data
+        with Cluster(['cassandra']).connect() as db:
+
+            db.execute("PRAGMA foreign_keys_ = ON")
+            sql = """CREATE TABLE IF NOT EXISTS crime
+                     (crimeID INTEGER PRIMARY KEY,
+                     age_range TEXT,
+                     outcome TEXT,
+                     self_defined_ethnicity TEXT,
+                     gender TEXT,
+                     location TEXT,
+                     officer_defined_ethnicity TEXT,
+                     object_of_search TEXT)"""
+            db.execute(sql)
+
+        #Gathering data to store in SQL table
+        for stop in stops:
+            age_range = stop["age_range"]
+            outcome = stop["outcome"]
+            self_defined_ethnicity = stop["self_defined_ethnicity"]
+            gender = stop["gender"]
+            location = stop["location"]["street"]["name"]
+            officer_defined_ethnicity = stop["officer_defined_ethnicity"]
+            object_of_search = stop["object_of_search"]
+
+            sql = """INSERT INTO crime(
+                  age_range,
+                  outcome,
+                  self_defined_ethnicity,
+                  gender,
+                  location,
+                  officer_defined_ethnicity,
+                  object_of_search)
+                  VALUES({}, {}, {}, {}, {}, {}, {})"""
+                  db.execute(sql.format(age_range, outcome, self_defined_ethnicity, gender, location, officer_defined_ethnicity, object_of_search))
+
+        data = db.execute("""SELECT * FROM crime""")
+
+        for crime in data:
+            return crime
+
 @app.route('/stopandsearch',  methods=['GET'])
 def stopschart():
     my_latitude = request.args.get('lat','52.629729')
     my_longitude = request.args.get('lng','-1.131592')
     my_date = request.args.get('date','2018-06')
-
 
     stops_url = stops_url_template.format(lat = my_latitude, lng = my_longitude, data = my_date)
 
@@ -32,7 +90,7 @@ def stopschart():
     for stop in stops:
         outcome = stop["outcome"]
         if not outcome:
-            search_outcome_stats['None'] += 1
+            search_outcome_stats['None']
         elif outcome not in search_outcome_stats.keys():
             search_outcome_stats.update({outcome:1})
         else:
@@ -108,9 +166,5 @@ def stopschart():
     graphJSON = json.dumps(graphs, cls=PlotlyJSONEncoder)
     return render_template('plotholder.html',ids=ids,graphJSON=graphJSON)
 
-
-
-
-
 if __name__=="__main__":
-    app.run(port=8080, debug=True)
+    app.run(host='0.0.0.0', port=8080)
