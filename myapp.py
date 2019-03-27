@@ -79,9 +79,9 @@ def home():
                   officer_defined_ethnicity,
                   object_of_search)
                   VALUES({}, {}, {}, {}, {}, {}, {})"""
-                  session.execute(sql.format(age_range, outcome, \
-                  self_defined_ethnicity, gender, location, \
-                  officer_defined_ethnicity, object))
+            session.execute(sql.format(age_range, outcome, \
+            self_defined_ethnicity, gender, location, \
+            officer_defined_ethnicity, object))
 
         data = session.execute("""SELECT * FROM stopandsearch""")
 
