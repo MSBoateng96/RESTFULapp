@@ -94,7 +94,7 @@ def stopschart():
     for stop in stops:
         outcome = stop["outcome"]
         if not outcome:
-            search_outcome_stats['None']
+            search_outcome_stats['None'] += 1
         elif outcome not in search_outcome_stats.keys():
             search_outcome_stats.update({outcome:1})
         else:
