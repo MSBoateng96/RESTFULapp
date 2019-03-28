@@ -1,11 +1,10 @@
 from flask import Flask, render_template, request, jsonify
+from cassandra.cluster import Cluster
 import plotly.graph_objs as go
 from plotly.utils import PlotlyJSONEncoder
 import json
 import requests
 import  requests_cache
-from cassandra.cluster import Cluster
-import sqlite3
 
 requests_cache.install_cache('crime_api_cache', backend='sqlite', expire_after=36000)
 
@@ -13,70 +12,13 @@ cluster = Cluster(['cassandra'])
 session = cluster.connect()
 app = Flask(__name__)
 
-#Creating the database
-session.execute("DROP KEYSPACE IF EXISTS stopandsearch")
-session.execute("""CREATE KEYSPACE stopandsearch WITH REPLICATION =
-                {'class' : 'SimpleStrategy', 'replication_factor' : 1}""")
-
-
 stops_url_template = 'https://data.police.uk/api/stops-street?lat={lat}&lng={lng}&date={data}'
 
 @app.route('/', methods=['GET'])
 def home():
+        return 'Welcome to my restful app'
 
-    my_latitude = request.args.get('lat','52.629729')
-    my_longitude = request.args.get('lng','-1.131592')
-    my_date = request.args.get('date','2018-06')
-
-    stops_url = stops_url_template.format(lat = my_latitude, lng = my_longitude, data = my_date)
-
-    resp = requests.get(stops_url)
-    if resp.ok:
-        stops = resp.json()
-    else:
-        print(resp.reason)
-
-    #Database - Connecting to cassandra to create table and store data
-    sql = """CREATE TABLE IF NOT EXISTS stopandsearch
-             (searchID INTEGER PRIMARY KEY,
-             age_range TEXT,
-             outcome TEXT,
-             self_defined_ethnicity TEXT,
-             gender TEXT,
-             location TEXT,
-             officer_defined_ethnicity TEXT,
-             object_of_search TEXT)"""
-    session.execute(sql)
-
-    #Gathering data to store in SQL table
-    for stop in stops:
-        age_range = stop["age_range"]
-        outcome = stop["outcome"]
-        self_defined_ethnicity = stop["self_defined_ethnicity"]
-        gender = stop["gender"]
-        location = stop["location"]["street"]["name"]
-        officer_defined_ethnicity = stop["officer_defined_ethnicity"]
-        object = stop["object_of_search"]
-
-        sql = """INSERT INTO stopandsearch(
-              age_range,
-              outcome,
-              self_defined_ethnicity,
-              gender,
-              location,
-              officer_defined_ethnicity,
-              object_of_search)
-              VALUES({}, {}, {}, {}, {}, {}, {})"""
-        session.execute(sql.format(age_range, outcome, \
-        self_defined_ethnicity, gender, location, \
-        officer_defined_ethnicity, object))
-
-    data = session.execute("""SELECT * FROM stopandsearch""")
-
-    for stop in data:
-        return stop
-
-@app.route('/stopandsearch',  methods=['GET'])
+@app.route('/stopandsearch',  methods=['GET', 'POST'])
 def stopschart():
     my_latitude = request.args.get('lat','52.629729')
     my_longitude = request.args.get('lng','-1.131592')
