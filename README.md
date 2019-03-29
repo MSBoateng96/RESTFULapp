@@ -1,6 +1,6 @@
 # RESTFULapp
 
-A Cloud Application with a REST-based interface, used to retrieve and present data from an API for Police Crime Data in the UK.
+A Cloud Application with a REST-based interface, used to retrieve and present data from an API for Police Crime Data. The data I focused on was statistics about *stop-and-search* in the UK.
 
 ## Installation
 
