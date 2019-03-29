@@ -4,7 +4,7 @@ import plotly.graph_objs as go
 from plotly.utils import PlotlyJSONEncoder
 import json
 import requests
-import  requests_cache
+import requests_cache
 
 requests_cache.install_cache('crime_api_cache', backend='sqlite', expire_after=36000)
 
